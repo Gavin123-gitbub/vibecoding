@@ -19,6 +19,16 @@ plane:
   height_mm: 200.0
   grid_spacing_mm: 20.0
 
+mapping:
+  mode: "kinematics" # "kinematics" or "angle_map"
+  board_origin: "center" # "center" or "corner"
+  xb_offset_mm: 0.0
+  yb_offset_mm: 0.0
+
+kinematics:
+  oq_mm: 250.0
+  ol_mm: 54.0
+
 angles:
   yaw_min_deg: -90.0
   yaw_max_deg: 90.0
