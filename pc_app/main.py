@@ -5,6 +5,7 @@ from camera_openmv import OpenMVCamera
 from calib import compute_homography, plane_to_pixel
 from grid import generate_grid_points
 from angle_map import AngleMapper
+from kinematics import inverse_kinematics, plane_to_board
 from laser_detect import detect_laser_center
 from pid import PID
 from serial_io import SerialSender
@@ -52,6 +53,8 @@ def main():
     cam_cfg = cfg["app"]
     plane_cfg = cfg["plane"]
     angle_cfg = cfg["angles"]
+    mapping_cfg = cfg["mapping"]
+    kin_cfg = cfg["kinematics"]
     pid_cfg = cfg["pid"]
 
     cam = OpenMVCamera(
@@ -80,27 +83,28 @@ def main():
 
     H = compute_homography(img_points, plane_cfg["width_mm"], plane_cfg["height_mm"])
 
-    # Angle map calibration (4 points)
-    angle_map = AngleMapper()
-    for i, p in enumerate(img_points):
-        px = int(p[0])
-        py = int(p[1])
-        print(
-            f"Point {i+1}/4. Aim laser to this corner and input yaw,pitch degrees."
-        )
-        user_in = input("Yaw,Pitch (deg): ").strip()
-        yaw_s, pitch_s = user_in.split(",")
-        angle_map.add_point(
-            (0.0, 0.0) if i == 0 else (
-                plane_cfg["width_mm"], 0.0
-            ) if i == 1 else (
-                plane_cfg["width_mm"], plane_cfg["height_mm"]
-            ) if i == 2 else (
-                0.0, plane_cfg["height_mm"]
-            ),
-            (float(yaw_s), float(pitch_s)),
-        )
-    angle_map.fit()
+    angle_map = None
+    if mapping_cfg["mode"] == "angle_map":
+        angle_map = AngleMapper()
+        for i, p in enumerate(img_points):
+            _ = int(p[0])
+            _ = int(p[1])
+            print(
+                f"Point {i+1}/4. Aim laser to this corner and input yaw,pitch degrees."
+            )
+            user_in = input("Yaw,Pitch (deg): ").strip()
+            yaw_s, pitch_s = user_in.split(",")
+            angle_map.add_point(
+                (0.0, 0.0) if i == 0 else (
+                    plane_cfg["width_mm"], 0.0
+                ) if i == 1 else (
+                    plane_cfg["width_mm"], plane_cfg["height_mm"]
+                ) if i == 2 else (
+                    0.0, plane_cfg["height_mm"]
+                ),
+                (float(yaw_s), float(pitch_s)),
+            )
+        angle_map.fit()
 
     grid_pts = generate_grid_points(
         plane_cfg["width_mm"], plane_cfg["height_mm"], plane_cfg["grid_spacing_mm"]
@@ -114,7 +118,18 @@ def main():
         if target_pixel is None:
             continue
 
-        yaw, pitch = angle_map.map(plane_xy)
+        if mapping_cfg["mode"] == "kinematics":
+            xb, yb = plane_to_board(
+                plane_xy, plane_cfg["width_mm"], plane_cfg["height_mm"], mapping_cfg["board_origin"]
+            )
+            xb += mapping_cfg["xb_offset_mm"]
+            yb += mapping_cfg["yb_offset_mm"]
+            ik = inverse_kinematics(kin_cfg["oq_mm"], kin_cfg["ol_mm"], xb, yb)
+            if ik is None:
+                continue
+            yaw, pitch = ik
+        else:
+            yaw, pitch = angle_map.map(plane_xy)
         yaw = clamp(yaw, angle_cfg["yaw_min_deg"], angle_cfg["yaw_max_deg"])
         pitch = clamp(pitch, angle_cfg["pitch_min_deg"], angle_cfg["pitch_max_deg"])
 
