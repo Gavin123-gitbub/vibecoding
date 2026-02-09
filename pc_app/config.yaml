@@ -1,0 +1,32 @@
+app:
+  camera_index: 0
+  camera_width: 640
+  camera_height: 480
+  camera_fps: 30
+  display_scale: 1.0
+  serial_port: "/dev/tty.usbserial-0001"
+  serial_baud: 115200
+  send_rate_hz: 10
+  max_pid_iters: 50
+  pixel_error_thresh: 3.0
+  laser_color_space: "HSV"
+  laser_hsv_lower: [0, 0, 240]
+  laser_hsv_upper: [180, 40, 255]
+  debug_draw: true
+
+plane:
+  width_mm: 300.0
+  height_mm: 200.0
+  grid_spacing_mm: 20.0
+
+angles:
+  yaw_min_deg: -90.0
+  yaw_max_deg: 90.0
+  pitch_min_deg: -45.0
+  pitch_max_deg: 45.0
+
+pid:
+  kp: 0.02
+  ki: 0.0
+  kd: 0.01
+  integral_limit: 50.0
