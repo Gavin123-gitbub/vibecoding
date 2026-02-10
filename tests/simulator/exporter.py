@@ -137,5 +137,4 @@ def save_to_uff(filename, data):
             }
         )
 
-    uff.write(str(filename))
     return filename
