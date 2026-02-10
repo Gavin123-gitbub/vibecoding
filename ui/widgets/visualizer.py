@@ -60,7 +60,7 @@ class GeometryView(QWidget):
         else:
             self.lines.setData(pos=pos, color=(0.0, 0.94, 1.0, 0.6), width=1.0, mode="line_strip")
 
-    def animate_mode_shape(self, shape_vector, freq_hz, base_points):
+    def animate_mode_shape(self, shape_vector, freq_hz, base_points, scale=1.0):
         """
         使用正弦规律对 Z 轴进行动画更新
         shape_vector: [n_nodes] or [n_nodes,]
@@ -69,6 +69,10 @@ class GeometryView(QWidget):
         if not base_points:
             return
         shape = np.asarray(shape_vector).flatten()
+        # 归一化幅值，避免过大导致爆炸
+        if np.max(np.abs(shape)) > 0:
+            shape = shape / np.max(np.abs(shape))
+        shape = shape * scale
         if len(shape) != len(base_points):
             return
 
