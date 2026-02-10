@@ -341,6 +341,72 @@ def stability_filter(results, freq_tol=0.02, damp_tol=0.05, mac_tol=0.9):
     return stable
 
 
+def build_stability_plot_data(results):
+    """
+    构造稳态图绘制数据结构:
+    - x: 频率 (Hz)
+    - y: 阻尼
+    - order: 阶数
+    """
+    points = []
+    for res in results:
+        order = res.get("order", None)
+        freq = np.atleast_1d(res["freq"])
+        damp = np.atleast_1d(res["damping"])
+        for i in range(min(len(freq), len(damp))):
+            points.append({"freq": float(freq[i]), "damp": float(damp[i]), "order": order})
+    return points
+
+
+def merge_multi_ref_results(results, freq_tol=0.02, mac_tol=0.9):
+    """
+    多参考结果聚类合并:
+    - 频率相近视为同一模态
+    - MAC 相似度筛选
+    """
+    merged = []
+    for res in results:
+        freq = np.atleast_1d(res["freq"])
+        damp = np.atleast_1d(res["damping"])
+        modes = res["mode_shape"]
+        for i in range(len(freq)):
+            f = float(freq[i])
+            d = float(damp[i])
+            u = modes[:, i]
+            found = False
+            for m in merged:
+                if abs(m["freq"] - f) / (m["freq"] + 1e-12) < freq_tol:
+                    mac = np.abs(np.vdot(m["mode"], u)) ** 2 / ((np.vdot(m["mode"], m["mode"]).real * np.vdot(u, u).real) + 1e-12)
+                    if mac >= mac_tol:
+                        m["freq"] = (m["freq"] + f) / 2.0
+                        m["damp"] = (m["damp"] + d) / 2.0
+                        m["mode"] = (m["mode"] + u) / 2.0
+                        found = True
+                        break
+            if not found:
+                merged.append({"freq": f, "damp": d, "mode": u})
+    return merged
+
+
+def estimate_peak_bandwidth(freqs, s1, peak_idx, drop_db=3.0):
+    """
+    自动扩展频带:
+    - 从峰值点向两侧搜索, 直到能量下降 drop_db
+    """
+    peak_val = s1[peak_idx]
+    target = peak_val * 10 ** (-drop_db / 20.0)
+
+    left = peak_idx
+    while left > 0 and s1[left] > target:
+        left -= 1
+
+    right = peak_idx
+    while right < len(s1) - 1 and s1[right] > target:
+        right += 1
+
+    return left, right
+
+
 def run_all_solvers(data: np.ndarray, fs: float):
     """
     示例: 依次调用 EFDD / SSI-COV / RDT-ERA
