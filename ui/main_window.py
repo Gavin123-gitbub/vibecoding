@@ -10,9 +10,21 @@ from PySide6.QtWidgets import (
     QFrame,
     QToolBar,
     QStatusBar,
+    QFileDialog,
+    QDialog,
+    QDialogButtonBox,
+    QInputDialog,
 )
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
+
+import numpy as np
+
+from core.data_manager import ModalDataSet, FRFEngine
+from core.geometry_builder import GeometryBuilder
+from core.uff_loader import UFFLoader
+from ui.widgets.geo_editor import GeoEditor
+from ui.widgets.channel_mapper import ChannelMapper
 
 
 class MainWindow(QMainWindow):
@@ -32,8 +44,14 @@ class MainWindow(QMainWindow):
         view_menu = menu_bar.addMenu("视图")
         help_menu = menu_bar.addMenu("帮助")
 
-        file_menu.addAction(QAction("新建项目", self))
-        file_menu.addAction(QAction("打开项目", self))
+        open_uff = QAction("打开 UFF/UNV", self)
+        open_uff.triggered.connect(self._open_uff)
+        file_menu.addAction(open_uff)
+
+        open_csv = QAction("打开 CSV/TXT", self)
+        open_csv.triggered.connect(self._open_csv)
+        file_menu.addAction(open_csv)
+
         file_menu.addSeparator()
         file_menu.addAction(QAction("导出", self))
         file_menu.addSeparator()
@@ -107,6 +125,7 @@ class MainWindow(QMainWindow):
         placeholder.setAlignment(Qt.AlignCenter)
         placeholder.setObjectName("centerPlaceholder")
         placeholder.setMinimumHeight(400)
+        self.center_placeholder = placeholder
 
         layout.addWidget(title)
         layout.addWidget(placeholder, 1)
@@ -128,3 +147,85 @@ class MainWindow(QMainWindow):
         layout.addWidget(title)
         layout.addWidget(placeholder, 1)
         return panel
+
+    def _open_uff(self):
+        path, _ = QFileDialog.getOpenFileName(self, "打开 UFF/UNV", "", "UFF/UNV (*.uff *.unv);;All (*.*)")
+        if not path:
+            return
+        dataset = UFFLoader.load(path)
+        self._update_geometry_view(dataset.geometry)
+
+    def _open_csv(self):
+        path, _ = QFileDialog.getOpenFileName(self, "打开 CSV/TXT", "", "Data (*.csv *.txt);;All (*.*)")
+        if not path:
+            return
+        time_data = self._load_time_data(path)
+        if time_data is None:
+            return
+
+        geo = self._collect_geometry()
+        if geo is None:
+            return
+
+        mappings = self._collect_channel_mapping(time_data.shape[1])
+        if mappings is None:
+            return
+
+        ref_index = next((i for i, m in enumerate(mappings) if m["type"] == "Reference"), 0)
+        fs, ok = QInputDialog.getDouble(self, "采样率", "输入采样率 (Hz):", 1000.0, 1.0, 1e6, 2)
+        if not ok:
+            return
+
+        frf, freq, coh = FRFEngine.compute_frf(time_data, ref_index, fs)
+        dataset = ModalDataSet(geometry=geo, frf_data=frf, freq_axis=freq, coherence=coh)
+        self._update_geometry_view(dataset.geometry)
+
+    def _load_time_data(self, path: str):
+        try:
+            return np.loadtxt(path, delimiter=",")
+        except Exception:
+            try:
+                return np.loadtxt(path)
+            except Exception:
+                return None
+
+    def _collect_geometry(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("节点坐标输入")
+        layout = QVBoxLayout(dialog)
+        editor = GeoEditor(dialog)
+        layout.addWidget(editor)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=dialog)
+        layout.addWidget(buttons)
+        geometry = {"nodes": [], "lines": []}
+
+        def on_update(geo):
+            nonlocal geometry
+            geometry = geo
+            self._update_geometry_view(geo)
+
+        editor.geometry_updated.connect(on_update)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        if dialog.exec() == QDialog.Accepted:
+            return geometry
+        return None
+
+    def _collect_channel_mapping(self, n_channels: int):
+        channels = [f"CH{i+1}" for i in range(n_channels)]
+        dialog = QDialog(self)
+        dialog.setWindowTitle("通道映射")
+        layout = QVBoxLayout(dialog)
+        mapper = ChannelMapper(channels, dialog)
+        layout.addWidget(mapper)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=dialog)
+        layout.addWidget(buttons)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        if dialog.exec() == QDialog.Accepted:
+            return mapper.get_mappings()
+        return None
+
+    def _update_geometry_view(self, geometry: dict):
+        nodes = geometry.get("nodes", [])
+        self.center_placeholder.setText(f"已加载节点: {len(nodes)}")
