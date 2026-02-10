@@ -42,6 +42,7 @@ class MainWindow(QMainWindow):
         self._build_toolbar()
         self._build_central()
         self.setStatusBar(QStatusBar(self))
+        self._anim_scale = 1.0
 
     def _build_menu(self) -> None:
         menu_bar = self.menuBar()
@@ -153,11 +154,22 @@ class MainWindow(QMainWindow):
         title = QLabel("参数 / 属性面板")
         title.setObjectName("panelTitle")
 
+        from PySide6.QtWidgets import QSlider
+
+        anim_label = QLabel("动画幅值")
+        anim_slider = QSlider(Qt.Horizontal)
+        anim_slider.setMinimum(1)
+        anim_slider.setMaximum(100)
+        anim_slider.setValue(10)
+        anim_slider.valueChanged.connect(lambda v: setattr(self, "_anim_scale", v / 10.0))
+
         placeholder = QLabel("参数控件占位")
         placeholder.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         placeholder.setObjectName("rightPlaceholder")
 
         layout.addWidget(title)
+        layout.addWidget(anim_label)
+        layout.addWidget(anim_slider)
         layout.addWidget(placeholder, 1)
         return panel
 
