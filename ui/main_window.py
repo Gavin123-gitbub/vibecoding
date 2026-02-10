@@ -163,14 +163,14 @@ class MainWindow(QMainWindow):
         anim_slider.setValue(10)
         anim_slider.valueChanged.connect(lambda v: setattr(self, "_anim_scale", v / 10.0))
 
-        placeholder = QLabel("参数控件占位")
-        placeholder.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        placeholder.setObjectName("rightPlaceholder")
+        self.mode_info = QLabel("当前模态: 未选择")
+        self.mode_info.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.mode_info.setObjectName("rightPlaceholder")
 
         layout.addWidget(title)
         layout.addWidget(anim_label)
         layout.addWidget(anim_slider)
-        layout.addWidget(placeholder, 1)
+        layout.addWidget(self.mode_info, 1)
         return panel
 
     def _open_uff(self):
@@ -336,6 +336,8 @@ class MainWindow(QMainWindow):
                 self.geometry_view.animate_mode_shape(shape.real, freq, self._last_geometry["nodes"], scale=self._anim_scale)
             # 保存结果用于导出
             self._last_modes = {"freq": freq, "damping": damping, "shape": shape}
+            if hasattr(self, "mode_info"):
+                self.mode_info.setText(f"当前模态:\n频率: {freq:.3f} Hz\n阻尼: {damping:.5f}")
 
         dialog.modes_selected.connect(on_modes_selected)
         dialog.exec()
