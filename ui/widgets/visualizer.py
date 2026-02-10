@@ -60,6 +60,42 @@ class GeometryView(QWidget):
         else:
             self.lines.setData(pos=pos, color=(0.0, 0.94, 1.0, 0.6), width=1.0, mode="line_strip")
 
+    def animate_mode_shape(self, shape_vector, freq_hz, base_points):
+        """
+        使用正弦规律对 Z 轴进行动画更新
+        shape_vector: [n_nodes] or [n_nodes,]
+        base_points: list of dicts with x,y,z
+        """
+        if not base_points:
+            return
+        shape = np.asarray(shape_vector).flatten()
+        if len(shape) != len(base_points):
+            return
+
+        from PySide6.QtCore import QTimer
+
+        if hasattr(self, "_timer") and self._timer:
+            self._timer.stop()
+
+        self._t = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(30)
+
+        def update():
+            self._t += 0.03
+            pos = []
+            colors = []
+            for i, p in enumerate(base_points):
+                z = p["z"] + shape[i] * np.sin(2 * np.pi * freq_hz * self._t)
+                pos.append([p["x"], p["y"], z])
+                colors.append([1.0, 1.0, 1.0, 1.0])
+            pos = np.asarray(pos, dtype=float)
+            self.scatter.setData(pos=pos, color=np.asarray(colors), size=6.0, pxMode=False)
+            self.lines.setData(pos=pos, color=(0.0, 0.94, 1.0, 0.6), width=1.0, mode="line_strip")
+
+        self._timer.timeout.connect(update)
+        self._timer.start()
+
 
 class SignalView(QWidget):
     def __init__(self, parent=None):
