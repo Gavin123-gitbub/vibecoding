@@ -62,7 +62,7 @@ def save_to_uff(filename, data):
     force = data.get("force", None)
     geom = np.asarray(data["geometry"])
 
-    uff = pyuff.UFF()
+    uff = pyuff.UFF(filename=str(filename))
 
     # Nodes
     for i, (x, y, z) in enumerate(geom, start=1):
