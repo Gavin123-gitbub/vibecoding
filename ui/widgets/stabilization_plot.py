@@ -78,6 +78,7 @@ class StabilizationPlot(QDialog):
         self.order_max.setValue(params.get("order_max", 50))
         self.fmin.setValue(params.get("fmin", 0.0))
         self.fmax.setValue(params.get("fmax", 1000.0))
+        self._apply_filters()
 
     def set_svd_curve(self, freq_axis, s1):
         self.svd_curve.setData(freq_axis, s1)
@@ -94,8 +95,22 @@ class StabilizationPlot(QDialog):
             stable_mask = np.zeros(len(points), dtype=bool)
         stable_mask = np.asarray(stable_mask, dtype=bool)
 
-        self.stable_scatter.setData(freqs[stable_mask], orders[stable_mask])
-        self.unstable_scatter.setData(freqs[~stable_mask], orders[~stable_mask])
+        self._stable_mask = stable_mask
+        self._apply_filters()
+
+    def _apply_filters(self):
+        if not self._points:
+            return
+        freqs = np.array([p["freq"] for p in self._points])
+        orders = np.array([p.get("order", 0) for p in self._points])
+        stable_mask = getattr(self, "_stable_mask", np.zeros(len(self._points), dtype=bool))
+
+        fmin = self.fmin.value()
+        fmax = self.fmax.value()
+        mask = (freqs >= fmin) & (freqs <= fmax)
+
+        self.stable_scatter.setData(freqs[mask & stable_mask], orders[mask & stable_mask])
+        self.unstable_scatter.setData(freqs[mask & ~stable_mask], orders[mask & ~stable_mask])
 
     def _toggle_select(self):
         if self._selection.isVisible():
