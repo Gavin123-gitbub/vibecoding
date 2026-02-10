@@ -24,9 +24,11 @@ from core.data_manager import ModalDataSet, FRFEngine
 from core.geometry_builder import GeometryBuilder
 from core.uff_loader import UFFLoader
 from core.controller import OMAController
+from core.algo_ods import TimeODS, FreqODS
 from ui.widgets.geo_editor import GeoEditor
 from ui.widgets.channel_mapper import ChannelMapper
 from ui.widgets.stabilization_plot import StabilizationPlot
+from ui.widgets.visualizer import GeometryView
 
 
 class MainWindow(QMainWindow):
@@ -132,14 +134,10 @@ class MainWindow(QMainWindow):
         title = QLabel("3D 几何 / 波形显示区")
         title.setObjectName("panelTitle")
 
-        placeholder = QLabel("显示区 (待接入渲染引擎)")
-        placeholder.setAlignment(Qt.AlignCenter)
-        placeholder.setObjectName("centerPlaceholder")
-        placeholder.setMinimumHeight(400)
-        self.center_placeholder = placeholder
+        self.geometry_view = GeometryView(panel)
 
         layout.addWidget(title)
-        layout.addWidget(placeholder, 1)
+        layout.addWidget(self.geometry_view, 1)
         return panel
 
     def _build_right_panel(self) -> QWidget:
@@ -165,6 +163,7 @@ class MainWindow(QMainWindow):
             return
         dataset = UFFLoader.load(path)
         self._update_geometry_view(dataset.geometry)
+        self._last_geometry = dataset.geometry
 
     def _open_csv(self):
         path, _ = QFileDialog.getOpenFileName(self, "打开 CSV/TXT", "", "Data (*.csv *.txt);;All (*.*)")
@@ -194,6 +193,7 @@ class MainWindow(QMainWindow):
         self._last_fs = fs
         self._last_frf = frf
         self._last_freq = freq
+        self._last_geometry = geo
 
     def _load_time_data(self, path: str):
         try:
@@ -243,7 +243,7 @@ class MainWindow(QMainWindow):
 
     def _update_geometry_view(self, geometry: dict):
         nodes = geometry.get("nodes", [])
-        self.center_placeholder.setText(f"已加载节点: {len(nodes)}")
+        self.geometry_view.set_points(nodes)
 
     def _run_quick_mode(self):
         if not hasattr(self, "_last_time_data"):
@@ -252,7 +252,8 @@ class MainWindow(QMainWindow):
         txt = "Quick Mode 结果:\n"
         for r in res:
             txt += f"f={r['f_peak']:.2f} Hz, damping={r['damping']:.4f}\n"
-        self.center_placeholder.setText(txt)
+        # 简化展示：用几何视图标题提示
+        self.setStatusTip(txt)
 
     def _run_pro_mode(self):
         if not hasattr(self, "_last_time_data"):
@@ -306,4 +307,43 @@ class MainWindow(QMainWindow):
                 stable_mask[i] = True
         dialog.set_poles(points, stable_mask)
 
+        def on_modes_selected(selected):
+            if not selected:
+                return
+            # 取第一个模态用于动画
+            freq = selected[0]["freq"]
+            # 简化: 使用频域ODS 提取
+            shape = FreqODS.extract(self._last_time_data, self._last_fs, freq)
+            if hasattr(self, "_last_geometry"):
+                self.geometry_view.animate_mode_shape(shape.real, freq, self._last_geometry["nodes"])
+
+        dialog.modes_selected.connect(on_modes_selected)
         dialog.exec()
+
+    def _export_report(self):
+        path, _ = QFileDialog.getSaveFileName(self, "导出报告", "", "CSV (*.csv);;UFF (*.uff)")
+        if not path:
+            return
+        # 简化: 输出当前 Quick/Pro 的最后结果占位
+        # 实际使用中应保存最新计算结果
+        rows = []
+        if hasattr(self, "_last_time_data"):
+            res = self.controller.quick_mode(self._last_time_data, self._last_fs, top_n=5)
+            for r in res:
+                rows.append([r["f_peak"], r["damping"]])
+        if path.endswith(".csv"):
+            import csv
+            with open(path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Frequency", "Damping"])
+                writer.writerows(rows)
+        elif path.endswith(".uff"):
+            try:
+                import pyuff
+                uff = pyuff.UFF()
+                # 简化写入为 Dataset 58 占位
+                for row in rows:
+                    uff.write_sets({"type": 58, "data": [row[0], row[1]]})
+                uff.write(path)
+            except Exception:
+                pass
