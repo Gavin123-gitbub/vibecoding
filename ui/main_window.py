@@ -258,6 +258,7 @@ class MainWindow(QMainWindow):
             txt += f"f={r['f_peak']:.2f} Hz, damping={r['damping']:.4f}\n"
         # 简化展示：用几何视图标题提示
         self.setStatusTip(txt)
+        self._last_modes = {"freq": res[0]["f_peak"], "damping": res[0]["damping"], "shape": None} if res else None
 
     def _run_pro_mode(self):
         if not hasattr(self, "_last_time_data"):
@@ -316,12 +317,13 @@ class MainWindow(QMainWindow):
                 return
             # 取第一个模态用于动画
             freq = selected[0]["freq"]
+            damping = selected[0].get("damping", 0.0)
             # 简化: 使用频域ODS 提取
             shape = FreqODS.extract(self._last_time_data, self._last_fs, freq)
             if hasattr(self, "_last_geometry"):
-                self.geometry_view.animate_mode_shape(shape.real, freq, self._last_geometry["nodes"], scale=1.0)
+                self.geometry_view.animate_mode_shape(shape.real, freq, self._last_geometry["nodes"], scale=self._anim_scale)
             # 保存结果用于导出
-            self._last_modes = {"freq": freq, "shape": shape}
+            self._last_modes = {"freq": freq, "damping": damping, "shape": shape}
 
         dialog.modes_selected.connect(on_modes_selected)
         dialog.exec()
@@ -332,7 +334,7 @@ class MainWindow(QMainWindow):
             return
         rows = []
         if hasattr(self, "_last_modes"):
-            rows.append([self._last_modes["freq"], 0.0])
+            rows.append([self._last_modes["freq"], self._last_modes.get("damping", 0.0)])
         elif hasattr(self, "_last_time_data"):
             res = self.controller.quick_mode(self._last_time_data, self._last_fs, top_n=5)
             for r in res:
