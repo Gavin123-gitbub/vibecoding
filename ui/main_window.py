@@ -272,11 +272,26 @@ class MainWindow(QMainWindow):
         else:
             if not hasattr(self, "_last_frf"):
                 return
-            out = self.controller.pro_mode_polymax(self._last_frf[:, 0], self._last_freq)
+            # PolyMax 多通道处理: 对每个通道独立求解并合并
+            poles_list = []
+            for ch in range(self._last_frf.shape[1]):
+                poly_out = self.controller.pro_mode_polymax(self._last_frf[:, ch], self._last_freq)
+                poles_list.append(poly_out["points"])
+            out = {
+                "points": [],
+                "stable": [],
+            }
+            # 合并多参考极点
+            from core.algo.polymax import merge_multi_ref_poles, cluster_stability_points
+            merged = merge_multi_ref_poles([poles for poles in poles_list])
+            stable = cluster_stability_points(merged, freq_tol=0.02, min_count=3)
+            out["points"] = merged
+            out["stable"] = stable
         dialog = StabilizationPlot(self)
 
         # 预填自适应参数
         params = self.controller.auto_params(self._last_time_data, self._last_fs)
+        dialog.set_params(params)
         # 暂时用占位曲线显示奇异值 (SVD of data covariance)
         s = np.linalg.svd(self._last_time_data, compute_uv=False)
         freq_axis = np.linspace(0, self._last_fs / 2, len(s))
