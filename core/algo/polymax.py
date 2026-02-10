@@ -93,3 +93,72 @@ class PolyMaxLSCF:
             poles_z, poles_s, _, _ = self.fit(frf, freq_axis, order)
             results.append({"order": order, "poles_z": poles_z, "poles_s": poles_s})
         return results
+
+
+def poles_to_stability_points(poles_s, order):
+    """
+    极点转稳态图点集:
+    freq = |mu| / 2π
+    damping = -Re(mu) / |mu|
+    """
+    points = []
+    for mu in poles_s:
+        wn = np.abs(mu)
+        if wn == 0:
+            continue
+        freq = wn / (2 * np.pi)
+        damping = -np.real(mu) / wn
+        points.append({"order": order, "freq": float(freq), "damping": float(damping)})
+    return points
+
+
+def merge_multi_ref_poles(poles_list, freq_tol=0.02):
+    """
+    多参考极点合并: 频率相近的极点合并
+    """
+    merged = []
+    for poles in poles_list:
+        for p in poles:
+            freq = p["freq"]
+            found = False
+            for m in merged:
+                if abs(m["freq"] - freq) / (m["freq"] + 1e-12) < freq_tol:
+                    m["freq"] = (m["freq"] + freq) / 2.0
+                    m["damping"] = (m["damping"] + p["damping"]) / 2.0
+                    found = True
+                    break
+            if not found:
+                merged.append({"freq": freq, "damping": p["damping"], "order": p.get("order")})
+    return merged
+
+
+def cluster_stability_points(points, freq_tol=0.02, min_count=3):
+    """
+    极点聚类 + 稳态筛选:
+    - 频率相近聚类
+    - 过滤出现次数 < min_count 的点
+    """
+    clusters = []
+    for p in points:
+        placed = False
+        for c in clusters:
+            if abs(c["freq"] - p["freq"]) / (c["freq"] + 1e-12) < freq_tol:
+                c["freqs"].append(p["freq"])
+                c["damps"].append(p["damping"])
+                c["count"] += 1
+                placed = True
+                break
+        if not placed:
+            clusters.append({"freq": p["freq"], "freqs": [p["freq"]], "damps": [p["damping"]], "count": 1})
+
+    stable = []
+    for c in clusters:
+        if c["count"] >= min_count:
+            stable.append(
+                {
+                    "freq": float(np.mean(c["freqs"])),
+                    "damping": float(np.mean(c["damps"])),
+                    "count": c["count"],
+                }
+            )
+    return stable
