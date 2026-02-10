@@ -345,11 +345,10 @@ class MainWindow(QMainWindow):
                 writer.writerows(rows)
         elif path.endswith(".uff"):
             try:
-                import pyuff
-                uff = pyuff.UFF()
-                # 简化写入为 Dataset 58 占位
-                for row in rows:
-                    uff.write_sets({"type": 58, "data": [row[0], row[1]]})
-                uff.write(path)
+                from core.uff_loader import UFFWriter
+                freqs = [r[0] for r in rows]
+                damps = [r[1] for r in rows]
+                geom = getattr(self, "_last_geometry", {"nodes": [], "lines": []})
+                UFFWriter.export_modal(path, geom, freqs, damps, np.array([]))
             except Exception:
                 pass
