@@ -48,3 +48,38 @@ class UFFLoader:
 
         geometry = {"nodes": nodes, "lines": lines}
         return ModalDataSet(geometry=geometry, frf_data=frf_data, freq_axis=freq_axis, coherence=coherence)
+
+
+class UFFWriter:
+    @staticmethod
+    def export_modal(path: str, geometry: dict, freqs: list, dampings: list, mode_shapes: np.ndarray):
+        """
+        简化导出:
+        - Dataset 15: 节点
+        - Dataset 82: 线
+        - Dataset 58: 模态参数 (示意)
+        """
+        import pyuff
+
+        uff = pyuff.UFF()
+        # Nodes (Dataset 15)
+        for node in geometry.get("nodes", []):
+            uff.write_sets(
+                {
+                    "type": 15,
+                    "node": node["id"],
+                    "x": node["x"],
+                    "y": node["y"],
+                    "z": node["z"],
+                    "desc": node.get("desc", ""),
+                }
+            )
+        # Lines (Dataset 82)
+        for line in geometry.get("lines", []):
+            uff.write_sets({"type": 82, "node1": line[0], "node2": line[1]})
+        # Modal params (Dataset 58) - 仅示例
+        for i, f in enumerate(freqs):
+            d = dampings[i] if i < len(dampings) else 0.0
+            uff.write_sets({"type": 58, "data": [f, d]})
+
+        uff.write(path)
