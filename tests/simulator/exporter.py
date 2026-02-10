@@ -64,13 +64,26 @@ def save_to_uff(filename, data):
 
     uff = pyuff.UFF(filename=str(filename))
 
-    # Nodes
-    for i, (x, y, z) in enumerate(geom, start=1):
-        uff.write_sets({"type": 15, "node": i, "x": x, "y": y, "z": z, "desc": f"Node_{i}"})
+    # Nodes (Dataset 15 expects arrays)
+    node_nums = np.arange(1, len(geom) + 1, dtype=int)
+    uff.write_sets(
+        {
+            "type": 15,
+            "node_nums": node_nums,
+            "x": geom[:, 0],
+            "y": geom[:, 1],
+            "z": geom[:, 2],
+        }
+    )
 
-    # Lines (simple chain)
-    for i in range(1, len(geom)):
-        uff.write_sets({"type": 82, "node1": i, "node2": i + 1})
+    # Lines (simple chain polyline)
+    uff.write_sets(
+        {
+            "type": 82,
+            "trace_num": 1,
+            "nodes": node_nums,
+        }
+    )
 
     # Function data (Dataset 58)
     dt = time[1] - time[0]
@@ -81,10 +94,10 @@ def save_to_uff(filename, data):
                 "func_type": 1,  # time domain response
                 "abscissa_spacing": 1,
                 "num_pts": len(time),
-                "abscissa": time,
-                "ord_data": response[i],
                 "rsp_node": i + 1,
+                "rsp_dir": 3,
                 "ref_node": 1,
+                "ref_dir": 3,
                 "data": response[i],
                 "x": time,
             }
@@ -99,10 +112,10 @@ def save_to_uff(filename, data):
                 "func_type": 1,
                 "abscissa_spacing": 1,
                 "num_pts": len(time),
-                "abscissa": time,
-                "ord_data": ref,
                 "rsp_node": 1,
+                "rsp_dir": 3,
                 "ref_node": 1,
+                "ref_dir": 3,
                 "data": ref,
                 "x": time,
             }
