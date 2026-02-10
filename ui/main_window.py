@@ -257,8 +257,22 @@ class MainWindow(QMainWindow):
     def _run_pro_mode(self):
         if not hasattr(self, "_last_time_data"):
             return
-        # 这里示例使用 SSI, 可扩展到 PolyMax
-        out = self.controller.pro_mode_ssi(self._last_time_data, self._last_fs)
+        mode, ok = QInputDialog.getItem(
+            self,
+            "Pro Mode",
+            "选择算法:",
+            ["SSI", "PolyMax"],
+            0,
+            False,
+        )
+        if not ok:
+            return
+        if mode == "SSI":
+            out = self.controller.pro_mode_ssi(self._last_time_data, self._last_fs)
+        else:
+            if not hasattr(self, "_last_frf"):
+                return
+            out = self.controller.pro_mode_polymax(self._last_frf[:, 0], self._last_freq)
         dialog = StabilizationPlot(self)
 
         # 预填自适应参数
