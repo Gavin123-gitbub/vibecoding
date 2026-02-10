@@ -23,6 +23,26 @@ class StabilizationPlot(QDialog):
     def _build_ui(self):
         layout = QVBoxLayout(self)
 
+        # 参数输入区
+        param_row = QHBoxLayout()
+        self.order_min = QSpinBox()
+        self.order_min.setRange(1, 200)
+        self.order_min.setPrefix("Min Order: ")
+        self.order_max = QSpinBox()
+        self.order_max.setRange(1, 200)
+        self.order_max.setPrefix("Max Order: ")
+        self.fmin = QDoubleSpinBox()
+        self.fmin.setRange(0.0, 1e6)
+        self.fmin.setPrefix("Fmin: ")
+        self.fmax = QDoubleSpinBox()
+        self.fmax.setRange(0.0, 1e6)
+        self.fmax.setPrefix("Fmax: ")
+        param_row.addWidget(self.order_min)
+        param_row.addWidget(self.order_max)
+        param_row.addWidget(self.fmin)
+        param_row.addWidget(self.fmax)
+        layout.addLayout(param_row)
+
         self.plot = pg.PlotWidget()
         self.plot.setBackground("#1E1E1E")
         self.plot.showGrid(x=True, y=True, alpha=0.2)
@@ -52,6 +72,12 @@ class StabilizationPlot(QDialog):
         self.confirm_btn.clicked.connect(self._confirm_selection)
 
         self._points = []  # list of dicts {freq, order, stable}
+
+    def set_params(self, params: dict):
+        self.order_min.setValue(params.get("order_min", 2))
+        self.order_max.setValue(params.get("order_max", 50))
+        self.fmin.setValue(params.get("fmin", 0.0))
+        self.fmax.setValue(params.get("fmax", 1000.0))
 
     def set_svd_curve(self, freq_axis, s1):
         self.svd_curve.setData(freq_axis, s1)
