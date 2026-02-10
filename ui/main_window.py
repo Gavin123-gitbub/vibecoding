@@ -66,6 +66,10 @@ class MainWindow(QMainWindow):
         pro_mode.triggered.connect(self._run_pro_mode)
         file_menu.addAction(pro_mode)
 
+        export_report = QAction("导出报告", self)
+        export_report.triggered.connect(self._export_report)
+        file_menu.addAction(export_report)
+
         file_menu.addAction(QAction("导出", self))
         file_menu.addSeparator()
         file_menu.addAction(QAction("退出", self))
