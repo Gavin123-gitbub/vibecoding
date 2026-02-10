@@ -72,6 +72,8 @@ class StabilizationPlot(QDialog):
         self.confirm_btn.clicked.connect(self._confirm_selection)
 
         self._points = []  # list of dicts {freq, order, stable}
+        self.fmin.valueChanged.connect(self._apply_filters)
+        self.fmax.valueChanged.connect(self._apply_filters)
 
     def set_params(self, params: dict):
         self.order_min.setValue(params.get("order_min", 2))
