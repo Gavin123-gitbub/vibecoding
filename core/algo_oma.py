@@ -9,9 +9,17 @@ class EFDD_Solver:
     输出: 模态频率、阻尼、模态向量等
     """
 
-    def __init__(self, mac_threshold: float = 0.9, nperseg: int = 2048):
+    def __init__(
+        self,
+        mac_threshold: float = 0.9,
+        nperseg: int = 2048,
+        peak_prominence: float = 0.05,
+        peak_distance_hz: float = 0.5,
+    ):
         self.mac_threshold = mac_threshold
         self.nperseg = nperseg
+        self.peak_prominence = peak_prominence
+        self.peak_distance_hz = peak_distance_hz
 
     @staticmethod
     def _mac(u: np.ndarray, v: np.ndarray) -> float:
@@ -55,11 +63,14 @@ class EFDD_Solver:
             s1[k] = S[0].real
             u1[:, k] = U[:, 0]
 
-        # 3) 峰值拾取: S1 曲线局部极大值
-        peaks = []
-        for k in range(1, len(s1) - 1):
-            if s1[k] > s1[k - 1] and s1[k] > s1[k + 1]:
-                peaks.append(k)
+        # 3) 峰值拾取: 使用 find_peaks
+        df = freqs[1] - freqs[0]
+        min_distance = max(1, int(self.peak_distance_hz / max(df, 1e-12)))
+        peaks, _ = signal.find_peaks(
+            s1,
+            prominence=self.peak_prominence * np.max(s1),
+            distance=min_distance,
+        )
 
         results = []
         for pk in peaks:
@@ -109,6 +120,18 @@ class EFDD_Solver:
             )
 
         return results
+
+    def solve_multi_ref(self, data: np.ndarray, fs: float, ref_indices):
+        """
+        多参考通道 EFDD: 对每个参考通道独立求解并合并结果
+        """
+        all_results = []
+        for ref_idx in ref_indices:
+            # 通过加权方式融合参考通道: 将数据重排使 ref_idx 优先
+            data_re = np.vstack([data[ref_idx], np.delete(data, ref_idx, axis=0)])
+            res = self.solve(data_re, fs)
+            all_results.extend(res)
+        return all_results
 
 
 class SSI_COV_Solver:
@@ -199,6 +222,16 @@ class SSI_COV_Solver:
 
         return results
 
+    def solve_multi_ref(self, data: np.ndarray, fs: float, ref_indices):
+        """
+        多参考通道 SSI-COV: 对每个参考通道独立求解并合并结果
+        """
+        all_results = []
+        for ref_idx in ref_indices:
+            data_re = np.vstack([data[ref_idx], np.delete(data, ref_idx, axis=0)])
+            all_results.extend(self.solve(data_re, fs))
+        return all_results
+
 
 class RDT_ERA_Solver:
     """
@@ -269,6 +302,43 @@ class RDT_ERA_Solver:
             "mode_shape": mode_shapes,
             "irf": irf,
         }
+
+
+def stability_filter(results, freq_tol=0.02, damp_tol=0.05, mac_tol=0.9):
+    """
+    稳态图判据:
+    - 频率相对变化 < freq_tol
+    - 阻尼相对变化 < damp_tol
+    - MAC > mac_tol
+    """
+    stable = []
+    for i in range(1, len(results)):
+        prev = results[i - 1]
+        curr = results[i]
+        freq_prev = np.atleast_1d(prev["freq"])
+        freq_curr = np.atleast_1d(curr["freq"])
+        damp_prev = np.atleast_1d(prev["damping"])
+        damp_curr = np.atleast_1d(curr["damping"])
+        mode_prev = prev["mode_shape"]
+        mode_curr = curr["mode_shape"]
+
+        for k in range(min(len(freq_prev), len(freq_curr))):
+            f1, f2 = freq_prev[k], freq_curr[k]
+            d1, d2 = damp_prev[k], damp_curr[k]
+            if f1 == 0:
+                continue
+            if abs(f2 - f1) / abs(f1) > freq_tol:
+                continue
+            if abs(d2 - d1) / (abs(d1) + 1e-12) > damp_tol:
+                continue
+            # MAC 计算
+            u = mode_prev[:, k]
+            v = mode_curr[:, k]
+            mac = np.abs(np.vdot(u, v)) ** 2 / ((np.vdot(u, u).real * np.vdot(v, v).real) + 1e-12)
+            if mac < mac_tol:
+                continue
+            stable.append((f2, d2, mac))
+    return stable
 
 
 def run_all_solvers(data: np.ndarray, fs: float):
