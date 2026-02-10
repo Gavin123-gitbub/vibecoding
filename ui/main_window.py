@@ -23,8 +23,10 @@ import numpy as np
 from core.data_manager import ModalDataSet, FRFEngine
 from core.geometry_builder import GeometryBuilder
 from core.uff_loader import UFFLoader
+from core.controller import OMAController
 from ui.widgets.geo_editor import GeoEditor
 from ui.widgets.channel_mapper import ChannelMapper
+from ui.widgets.stabilization_plot import StabilizationPlot
 
 
 class MainWindow(QMainWindow):
@@ -32,6 +34,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("扫描式激光测振仪后处理软件")
         self.resize(1400, 900)
+        self.controller = OMAController()
 
         self._build_menu()
         self._build_toolbar()
@@ -53,6 +56,14 @@ class MainWindow(QMainWindow):
         file_menu.addAction(open_csv)
 
         file_menu.addSeparator()
+        quick_mode = QAction("Quick Mode (EFDD)", self)
+        quick_mode.triggered.connect(self._run_quick_mode)
+        file_menu.addAction(quick_mode)
+
+        pro_mode = QAction("Pro Mode (SSI/PolyMax)", self)
+        pro_mode.triggered.connect(self._run_pro_mode)
+        file_menu.addAction(pro_mode)
+
         file_menu.addAction(QAction("导出", self))
         file_menu.addSeparator()
         file_menu.addAction(QAction("退出", self))
@@ -179,6 +190,10 @@ class MainWindow(QMainWindow):
         frf, freq, coh = FRFEngine.compute_frf(time_data, ref_index, fs)
         dataset = ModalDataSet(geometry=geo, frf_data=frf, freq_axis=freq, coherence=coh)
         self._update_geometry_view(dataset.geometry)
+        self._last_time_data = time_data
+        self._last_fs = fs
+        self._last_frf = frf
+        self._last_freq = freq
 
     def _load_time_data(self, path: str):
         try:
@@ -229,3 +244,37 @@ class MainWindow(QMainWindow):
     def _update_geometry_view(self, geometry: dict):
         nodes = geometry.get("nodes", [])
         self.center_placeholder.setText(f"已加载节点: {len(nodes)}")
+
+    def _run_quick_mode(self):
+        if not hasattr(self, "_last_time_data"):
+            return
+        res = self.controller.quick_mode(self._last_time_data, self._last_fs, top_n=5)
+        txt = "Quick Mode 结果:\n"
+        for r in res:
+            txt += f"f={r['f_peak']:.2f} Hz, damping={r['damping']:.4f}\n"
+        self.center_placeholder.setText(txt)
+
+    def _run_pro_mode(self):
+        if not hasattr(self, "_last_time_data"):
+            return
+        # 这里示例使用 SSI, 可扩展到 PolyMax
+        out = self.controller.pro_mode_ssi(self._last_time_data, self._last_fs)
+        dialog = StabilizationPlot(self)
+
+        # 预填自适应参数
+        params = self.controller.auto_params(self._last_time_data, self._last_fs)
+        # 暂时用占位曲线显示奇异值 (SVD of data covariance)
+        s = np.linalg.svd(self._last_time_data, compute_uv=False)
+        freq_axis = np.linspace(0, self._last_fs / 2, len(s))
+        dialog.set_svd_curve(freq_axis, s)
+
+        # 稳态极点显示
+        points = out["points"]
+        stable_mask = np.zeros(len(points), dtype=bool)
+        stable_pts = set([(p[0], p[1]) for p in out["stable"]])
+        for i, p in enumerate(points):
+            if (p["freq"], p["damp"]) in stable_pts:
+                stable_mask[i] = True
+        dialog.set_poles(points, stable_mask)
+
+        dialog.exec()
