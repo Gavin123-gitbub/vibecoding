@@ -319,7 +319,9 @@ class MainWindow(QMainWindow):
             # 简化: 使用频域ODS 提取
             shape = FreqODS.extract(self._last_time_data, self._last_fs, freq)
             if hasattr(self, "_last_geometry"):
-                self.geometry_view.animate_mode_shape(shape.real, freq, self._last_geometry["nodes"])
+                self.geometry_view.animate_mode_shape(shape.real, freq, self._last_geometry["nodes"], scale=1.0)
+            # 保存结果用于导出
+            self._last_modes = {"freq": freq, "shape": shape}
 
         dialog.modes_selected.connect(on_modes_selected)
         dialog.exec()
@@ -328,10 +330,10 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "导出报告", "", "CSV (*.csv);;UFF (*.uff)")
         if not path:
             return
-        # 简化: 输出当前 Quick/Pro 的最后结果占位
-        # 实际使用中应保存最新计算结果
         rows = []
-        if hasattr(self, "_last_time_data"):
+        if hasattr(self, "_last_modes"):
+            rows.append([self._last_modes["freq"], 0.0])
+        elif hasattr(self, "_last_time_data"):
             res = self.controller.quick_mode(self._last_time_data, self._last_fs, top_n=5)
             for r in res:
                 rows.append([r["f_peak"], r["damping"]])
