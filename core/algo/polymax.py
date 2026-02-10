@@ -84,15 +84,32 @@ class PolyMaxLSCF:
     def sweep_orders(self, frf: np.ndarray, freq_axis: np.ndarray, orders=range(2, 65)):
         """
         稳态图数据: 扫描阶数并收集极点
-        返回: list of dict {order, poles_z, poles_s}
+        返回:
+          - raw: list of dict {order, poles_z, poles_s}
+          - points: list of {order, freq, damping}
         """
-        results = []
+        raw = []
+        points = []
         for order in orders:
             if order < 1 or order > self.max_order:
                 continue
             poles_z, poles_s, _, _ = self.fit(frf, freq_axis, order)
-            results.append({"order": order, "poles_z": poles_z, "poles_s": poles_s})
-        return results
+            raw.append({"order": order, "poles_z": poles_z, "poles_s": poles_s})
+            points.extend(poles_to_stability_points(poles_s, order))
+        return {"raw": raw, "points": points}
+
+    def sweep_and_cluster(self, frf: np.ndarray, freq_axis: np.ndarray, orders=range(2, 65), freq_tol=0.02, min_count=3):
+        """
+        扫描阶数 + 极点聚类筛选
+        返回:
+          - raw: 原始极点
+          - points: 稳态图点集
+          - stable: 聚类后的稳定模态
+        """
+        out = self.sweep_orders(frf, freq_axis, orders)
+        stable = cluster_stability_points(out["points"], freq_tol=freq_tol, min_count=min_count)
+        out["stable"] = stable
+        return out
 
 
 def poles_to_stability_points(poles_s, order):
